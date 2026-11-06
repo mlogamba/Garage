@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Parking · Pagos</title>
+<meta name="theme-color" content="#20272b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Parking">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@600;700&display=swap">
+<style>
+:root{--asfalto:#20272b;--linea:#ffc933;--fondo:#e9ecee;--tinta:#1d2327;--suave:#5d6a72;--ok:#1f7a4d;--mal:#b3261e;--borde:#cfd5d9}
+*{box-sizing:border-box}
+body{margin:0;background:var(--fondo);color:var(--tinta);font:16px/1.4 Barlow,system-ui,sans-serif}
+.num{font-variant-numeric:tabular-nums}
+header{background:var(--asfalto);color:#fff;padding:calc(28px + env(safe-area-inset-top)) 20px 24px;border-bottom:6px dashed var(--linea)}
+.wrap{max-width:640px;margin:0 auto}
+h1{font:700 34px/1 'Barlow Condensed',sans-serif;margin:0 0 18px;letter-spacing:.5px}
+.resumen{display:flex;gap:28px;flex-wrap:wrap}
+.resumen b{display:block;font:700 28px/1.1 'Barlow Condensed',sans-serif}
+.resumen span{color:#aeb9bf;font-size:14px}
+.chip{display:inline-block;margin-top:16px;padding:4px 12px;border-radius:99px;font-weight:600;font-size:14px}
+.chip.ok{background:#d8f1e3;color:var(--ok)}.chip.mal{background:#fde0dd;color:var(--mal)}
+main{padding:16px 20px 90px}
+h2{font:700 22px/1 'Barlow Condensed',sans-serif;margin:26px 0 6px;color:var(--suave)}
+.fila{display:flex;justify-content:space-between;gap:12px;width:100%;text-align:left;background:#fff;border:0;border-bottom:1px solid var(--borde);padding:12px 14px;font:inherit;color:inherit;cursor:pointer}
+.fila:first-of-type{border-radius:8px 8px 0 0}.fila:last-of-type{border-radius:0 0 8px 8px;border-bottom:0}
+.fila:hover{background:#fbfbf3}
+.fila small{display:block;color:var(--suave)}
+.fila .der{text-align:right;white-space:nowrap}.fila .der b{font-weight:600}
+.nota{font-style:italic}
+.vacio{color:var(--suave);padding:30px 0;text-align:center}
+.barra{position:fixed;left:0;right:0;bottom:0;background:var(--fondo);border-top:1px solid var(--borde);padding:10px 20px calc(10px + env(safe-area-inset-bottom))}
+.barra .wrap{display:flex;justify-content:space-between;align-items:center;gap:10px}
+#estado{font-size:13px;color:var(--suave)}#estado.err{color:var(--mal)}
+button.p{background:var(--linea);color:var(--tinta);border:0;border-radius:8px;padding:11px 18px;font:600 16px Barlow,sans-serif;cursor:pointer}
+button.s{background:none;border:1px solid var(--borde);border-radius:8px;padding:10px 16px;font:500 16px Barlow,sans-serif;cursor:pointer;color:var(--tinta)}
+button.peligro{color:var(--mal);border-color:var(--mal)}
+button:focus-visible,input:focus-visible{outline:3px solid var(--asfalto);outline-offset:2px}
+dialog{border:0;border-radius:12px;padding:22px;width:min(420px,calc(100% - 32px));box-shadow:0 10px 40px #0004}
+dialog::backdrop{background:#20272bb0}
+dialog h3{font:700 24px/1 'Barlow Condensed',sans-serif;margin:0 0 14px}
+label{display:block;font-weight:500;font-size:14px;margin:12px 0 4px}
+input{width:100%;padding:10px;border:1px solid var(--borde);border-radius:8px;font:inherit}
+.acciones{display:flex;gap:8px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap}
+.msg{min-height:20px;margin-top:10px;font-size:14px;color:var(--suave)}.msg.err{color:var(--mal)}
+footer{text-align:center;margin-top:30px}footer button{background:none;border:0;color:var(--suave);text-decoration:underline;cursor:pointer;font:inherit;font-size:14px}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <h1>Parking · Alquiler</h1>
+  <div class="resumen">
+    <div><b class="num" id="total">–</b><span>total pagado</span></div>
+    <div><b class="num" id="cuenta">–</b><span>pagos registrados</span></div>
+    <div><b class="num" id="ultimo">–</b><span>último pago</span></div>
+  </div>
+  <div class="chip" id="chip" hidden></div>
+</div></header>
+
+<main><div class="wrap">
+  <div id="lista"></div>
+  <footer>
+    <p id="instalar" hidden><button class="p" id="btnInstalar">Instalar la app</button></p>
+    <p id="ayudaIos" class="vacio" hidden>Para instalarla: pulsa <b>Compartir</b> y luego <b>Añadir a pantalla de inicio</b>.</p>
+    <button id="btnClave">Cambiar contraseña</button>
+  </footer>
+</div></main>
+
+<div class="barra"><div class="wrap">
+  <span id="estado">Cargando…</span>
+  <button class="p" id="btnNuevo">+ Registrar pago</button>
+</div></div>
+
+<dialog id="dlg"><form id="frm" autocomplete="off">
+  <h3 id="dlgTitulo">Registrar pago</h3>
+  <label for="mes">Mes que se paga</label><input id="mes" type="month" required>
+  <label for="fecha">Fecha del pago</label><input id="fecha" type="date" required>
+  <label for="importe">Importe (€)</label><input id="importe" type="number" min="0.01" step="0.01" required>
+  <label for="nota">Nota (opcional)</label><input id="nota" type="text" maxlength="500">
+  <label for="clave">Contraseña</label><input id="clave" type="password" inputmode="numeric" required>
+  <div class="msg" id="msg"></div>
+  <div class="acciones">
+    <button type="button" class="s peligro" id="btnEliminar" hidden>Eliminar</button>
+    <button type="button" class="s" id="btnCancelar">Cancelar</button>
+    <button type="submit" class="p">Guardar</button>
+  </div>
+</form></dialog>
+
+<dialog id="dlgClave"><form id="frmClave" autocomplete="off">
+  <h3>Cambiar contraseña</h3>
+  <label for="claveActual">Contraseña actual</label><input id="claveActual" type="password" required>
+  <label for="claveNueva">Contraseña nueva</label><input id="claveNueva" type="password" minlength="4" required>
+  <div class="msg" id="msgClave"></div>
+  <div class="acciones">
+    <button type="button" class="s" id="cancelarClave">Cancelar</button>
+    <button type="submit" class="p">Cambiar</button>
+  </div>
+</form></dialog>
+
+<script>
+// 1) Pega aquí la URL de tu aplicación web de Apps Script (termina en /exec)
+const API_URL = 'PEGA_AQUI_LA_URL_DE_APPS_SCRIPT';
+const CUOTA = 100;
+const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+const $ = s => document.querySelector(s);
+const eur = n => n.toLocaleString('es-ES', {style:'currency', currency:'EUR'});
+const mesTxt = m => { const [a,b] = m.split('-'); const t = MESES[b-1]; return t[0].toUpperCase() + t.slice(1) + ' ' + a; };
+const fechaTxt = f => f.split('-').reverse().join('/');
+const hoy = () => { const d = new Date(); return new Date(d - d.getTimezoneOffset()*6e4).toISOString().slice(0,10); };
+const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+let pagos = [], editando = null, confirmando = false;
+try { pagos = JSON.parse(localStorage.getItem('pagos') || '[]'); } catch (e) {}
+
+function estado(t, err) { const e = $('#estado'); e.textContent = t; e.className = err ? 'err' : ''; }
+function guardarCopia() { try { localStorage.setItem('pagos', JSON.stringify(pagos)); } catch (e) {} }
+
+function render() {
+  const orden = [...pagos].sort((a,b) => b.mes.localeCompare(a.mes) || b.fecha.localeCompare(a.fecha));
+  const total = pagos.reduce((s,p) => s + p.importe, 0);
+  $('#total').textContent = eur(total);
+  $('#cuenta').textContent = pagos.length;
+  $('#ultimo').textContent = orden.length ? fechaTxt([...pagos].sort((a,b) => b.fecha.localeCompare(a.fecha))[0].fecha) : '–';
+
+  const clave = hoy().slice(0,7);
+  const pagado = pagos.filter(p => p.mes === clave).reduce((s,p) => s + p.importe, 0) >= CUOTA;
+  const chip = $('#chip'); chip.hidden = false;
+  chip.className = 'chip ' + (pagado ? 'ok' : 'mal');
+  chip.textContent = mesTxt(clave) + ': ' + (pagado ? 'pagado' : 'pendiente de pago');
+
+  if (!orden.length) { $('#lista').innerHTML = '<div class="vacio">Aún no hay pagos. Pulsa «Registrar pago» para añadir el primero.</div>'; return; }
+  let html = '', anio = '';
+  for (const p of orden) {
+    const a = p.mes.slice(0,4);
+    if (a !== anio) { if (anio) html += '</div>'; anio = a; html += `<h2>${a}</h2><div>`; }
+    html += `<button class="fila" data-id="${p.id}"><span><b>${mesTxt(p.mes)}</b><small>Pagado el ${fechaTxt(p.fecha)}</small>${p.nota ? `<small class="nota">${esc(p.nota)}</small>` : ''}</span><span class="der num"><b>${eur(p.importe)}</b></span></button>`;
+  }
+  $('#lista').innerHTML = html + '</div>';
+}
+
+async function sincronizar() {
+  if (API_URL.startsWith('PEGA')) { estado('Falta configurar la URL de Apps Script', true); return; }
+  try {
+    const r = await fetch(API_URL + '?t=' + Date.now());
+    const d = await r.json();
+    if (!d.ok) throw new Error();
+    pagos = d.pagos; guardarCopia(); render();
+    estado('Sincronizado a las ' + new Date().toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit'}));
+  } catch (e) { estado('Sin conexión · se muestra la última copia', true); }
+}
+
+async function enviar(cuerpo, msgEl) {
+  msgEl.className = 'msg'; msgEl.textContent = 'Guardando…';
+  try {
+    const r = await fetch(API_URL, {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify(cuerpo)});
+    const d = await r.json();
+    if (!d.ok) { msgEl.className = 'msg err'; msgEl.textContent = d.error; return false; }
+    if (d.pagos) { pagos = d.pagos; guardarCopia(); render(); }
+    estado('Guardado y sincronizado');
+    return true;
+  } catch (e) { msgEl.className = 'msg err'; msgEl.textContent = 'No se pudo conectar. Inténtalo de nuevo.'; return false; }
+}
+
+function abrir(p) {
+  editando = p ? p.id : null; confirmando = false;
+  $('#dlgTitulo').textContent = p ? 'Editar pago' : 'Registrar pago';
+  $('#mes').value = p ? p.mes : hoy().slice(0,7);
+  $('#fecha').value = p ? p.fecha : hoy();
+  $('#importe').value = p ? p.importe : CUOTA;
+  $('#nota').value = p ? p.nota : '';
+  $('#clave').value = ''; $('#msg').textContent = '';
+  const b = $('#btnEliminar'); b.hidden = !p; b.textContent = 'Eliminar';
+  $('#dlg').showModal();
+}
+
+$('#btnNuevo').onclick = () => abrir(null);
+$('#lista').onclick = e => { const f = e.target.closest('.fila'); if (f) abrir(pagos.find(p => p.id === f.dataset.id)); };
+$('#btnCancelar').onclick = () => $('#dlg').close();
+$('#frm').onsubmit = async e => {
+  e.preventDefault();
+  const ok = await enviar({action: editando ? 'update' : 'add', id: editando, clave: $('#clave').value,
+    mes: $('#mes').value, fecha: $('#fecha').value, importe: parseFloat($('#importe').value), nota: $('#nota').value.trim()}, $('#msg'));
+  if (ok) $('#dlg').close();
+};
+$('#btnEliminar').onclick = async () => {
+  if (!confirmando) { confirmando = true; $('#btnEliminar').textContent = 'Confirmar eliminación'; return; }
+  const ok = await enviar({action:'delete', id:editando, clave:$('#clave').value}, $('#msg'));
+  if (ok) $('#dlg').close();
+};
+
+$('#btnClave').onclick = () => { $('#frmClave').reset(); $('#msgClave').textContent = ''; $('#dlgClave').showModal(); };
+$('#cancelarClave').onclick = () => $('#dlgClave').close();
+$('#frmClave').onsubmit = async e => {
+  e.preventDefault();
+  const ok = await enviar({action:'cambiarClave', clave:$('#claveActual').value, nueva:$('#claveNueva').value}, $('#msgClave'));
+  if (ok) { $('#dlgClave').close(); estado('Contraseña cambiada'); }
+};
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+const instalada = matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+let invitacion = null;
+addEventListener('beforeinstallprompt', e => { e.preventDefault(); invitacion = e; $('#instalar').hidden = false; });
+$('#btnInstalar').onclick = async () => { if (!invitacion) return; invitacion.prompt(); await invitacion.userChoice; invitacion = null; $('#instalar').hidden = true; };
+addEventListener('appinstalled', () => { $('#instalar').hidden = true; });
+if (!instalada && /iphone|ipad|ipod/i.test(navigator.userAgent)) $('#ayudaIos').hidden = false;
+
+render(); sincronizar();
+setInterval(() => { if (!document.hidden && !$('#dlg').open && !$('#dlgClave').open) sincronizar(); }, 20000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) sincronizar(); });
+</script>
+</body>
+</html>
