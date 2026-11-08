@@ -49,8 +49,30 @@ label{display:block;font-weight:500;font-size:14px;margin:12px 0 4px}
 input{width:100%;padding:10px;border:1px solid var(--borde);border-radius:8px;font:inherit}
 .acciones{display:flex;gap:8px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap}
 .msg{min-height:20px;margin-top:10px;font-size:14px;color:var(--suave)}.msg.err{color:var(--mal)}
-.aviso{padding:12px 14px;border-radius:8px;margin:10px 0;font-weight:600}
-.aviso.mal{background:#fde0dd;color:var(--mal)}.aviso.ok{background:#d8f1e3;color:var(--ok)}
+.aviso-dlg{padding:0;overflow:hidden;width:min(400px,calc(100% - 32px));border-radius:18px}
+.aviso-dlg[open]{animation:av-in .35s cubic-bezier(.2,1.3,.4,1)}
+@keyframes av-in{from{transform:translateY(24px) scale(.9);opacity:0}}
+.av-cab{position:relative;color:#fff;text-align:center;padding:30px 20px 24px}
+.av-cab.mal{background:linear-gradient(160deg,#e0382c,#8f1a12)}
+.av-cab.ok{background:linear-gradient(160deg,#2fb36d,#14623b)}
+.av-cab svg{display:block;margin:0 auto 10px}
+.av-cab.mal svg{animation:av-pulso 1.1s ease-in-out infinite}
+@keyframes av-pulso{50%{transform:scale(1.12)}}
+.av-cab .chk{stroke-dasharray:60;stroke-dashoffset:60;animation:av-chk .6s .25s ease-out forwards}
+@keyframes av-chk{to{stroke-dashoffset:0}}
+.av-mes{font:700 46px/1 'Barlow Condensed',sans-serif;text-transform:uppercase;letter-spacing:1px}
+.av-sub{font:600 18px/1.2 Barlow,sans-serif;margin-top:8px;text-transform:uppercase;letter-spacing:2px}
+.av-conf{position:absolute;top:-14px;width:8px;height:14px;opacity:0;animation:av-cae 1.9s ease-out forwards}
+@keyframes av-cae{10%{opacity:1}to{transform:translateY(260px) rotate(540deg);opacity:0}}
+.av-cuerpo{padding:20px 22px 22px}
+.av-txt{margin:0 0 12px;font-weight:500}
+.av-extra{margin:0 0 12px;padding:8px 12px;border-radius:8px;background:#d8f1e3;color:var(--ok);font-weight:600;font-size:14px}
+.av-extra.prueba{background:#fff3cd;color:#7a5b00}
+.av-btn{width:100%;border:0;border-radius:10px;padding:14px;font:700 17px Barlow,sans-serif;cursor:pointer;color:#fff;margin-top:8px}
+.av-btn.mal{background:#c5221a}.av-btn.ok{background:#1f7a4d}.av-btn:disabled{opacity:.6}
+.av-links{display:flex;justify-content:space-between;margin-top:12px}
+.av-links button{background:none;border:0;color:var(--suave);text-decoration:underline;font:inherit;font-size:14px;cursor:pointer}
+@media (prefers-reduced-motion:reduce){.aviso-dlg[open],.av-cab svg,.av-conf{animation:none!important}.av-cab .chk{animation:none;stroke-dashoffset:0}}
 footer{text-align:center;margin-top:30px}footer button{background:none;border:0;color:var(--suave);text-decoration:underline;cursor:pointer;font:inherit;font-size:14px}
 </style>
 </head>
@@ -105,15 +127,11 @@ footer{text-align:center;margin-top:30px}footer button{background:none;border:0;
   </div>
 </form></dialog>
 
-<dialog id="dlgAviso">
-  <h3>Aviso</h3>
-  <div id="avisoTexto"></div>
-  <div class="acciones"><button class="p" id="btnAviso">Entendido</button></div>
-</dialog>
+<dialog id="dlgAviso" class="aviso-dlg"></dialog>
 
 <script>
 // 1) Pega aquí la URL de tu aplicación web de Apps Script (termina en /exec)
-const API_URL = 'https://script.google.com/macros/s/AKfycby6g08vMLgpVNIfQB5gcNEdsGT9BXgfuyNEUiwiEmZgffpI_GsPLnFIfJ47epbh0yXTWg/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbx9arRw4RHtfTe-igPaIn9isV18JuSESaDfceBne66WlYw_AzdVtJD9zIHeyEjL__-Qeg/exec';
 const CUOTA = 100;
 const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 const $ = s => document.querySelector(s);
@@ -141,23 +159,65 @@ function marcarVistos(ids) {
 }
 const mesNombre = m => { const [a, b] = m.split('-'); return MESES[b-1] + (a !== hoy().slice(0,4) ? ' de ' + a : ''); };
 
+// Vista previa de los avisos: añade ?aviso=pendiente o ?aviso=pagado a la dirección (no guarda nada).
+const demo = ['pendiente', 'pagado'].includes(new URLSearchParams(location.search).get('aviso')) ? new URLSearchParams(location.search).get('aviso') : null;
+const ICONO = {
+  mal: '<svg viewBox="0 0 64 64" width="76" height="76" aria-hidden="true"><path d="M32 6 60 56H4Z" fill="none" stroke="#fff" stroke-width="4" stroke-linejoin="round"/><path d="M32 25v15" stroke="#fff" stroke-width="5" stroke-linecap="round"/><circle cx="32" cy="48" r="3" fill="#fff"/></svg>',
+  ok: '<svg viewBox="0 0 64 64" width="76" height="76" aria-hidden="true"><circle cx="32" cy="32" r="28" fill="none" stroke="#fff" stroke-width="4"/><path class="chk" d="M19 33l9 9 17-19" fill="none" stroke="#fff" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+};
+const unir = a => a.length > 1 ? a.slice(0, -1).join(', ') + ' y ' + a[a.length - 1] : a[0];
+const cap = t => t[0].toUpperCase() + t.slice(1);
+
+// Dibuja el aviso: pend = mes pendiente (o null), pagados = meses pagados, exito = acaba de pagarse aquí.
+function pintarAviso(pend, pagados, exito) {
+  const d = $('#dlgAviso'), tipo = pend ? 'mal' : 'ok', lista = pagados.map(mesNombre);
+  const prueba = demo ? '<p class="av-extra prueba">Vista previa: no se guarda nada.</p>' : '';
+  const conf = tipo === 'ok' && !matchMedia('(prefers-reduced-motion: reduce)').matches
+    ? Array.from({length: 18}, (_, i) => `<i class="av-conf" style="left:${(i*37+11)%100}%;background:${['#ffc933','#fff','#8be0b0','#ffd86b'][i%4]};animation-delay:${(i%6)*0.12}s"></i>`).join('') : '';
+  let cab, sub, cuerpo;
+  if (pend) {
+    cab = cap(mesNombre(pend)); sub = 'pendiente de pago';
+    cuerpo = `${prueba}<p class="av-txt">El mes de ${mesNombre(pend)} aún está pendiente de pago.</p>`
+      + (lista.length ? `<p class="av-extra">✓ El mes de ${unir(lista)} ha sido pagado.</p>` : '')
+      + `<label for="avClave">Contraseña</label><input id="avClave" type="password" inputmode="numeric" autocomplete="off">`
+      + `<div class="msg" id="avMsg"></div><button class="av-btn mal" id="avPagar">Registrar pago de ${eur(CUOTA)} ahora</button>`
+      + `<div class="av-links"><button id="avOtro">Otro importe o nota</button><button id="avCerrar">Más tarde</button></div>`;
+  } else {
+    cab = cap(unir(lista)); sub = exito ? '¡pago registrado!' : 'pagado';
+    cuerpo = `${prueba}<p class="av-txt">El mes de ${unir(lista)} ha sido pagado.</p><button class="av-btn ok" id="avCerrar">Entendido</button>`;
+  }
+  d.innerHTML = `<div class="av-cab ${tipo}">${conf}${ICONO[tipo]}<div class="av-mes">${cab}</div><div class="av-sub">${sub}</div></div><div class="av-cuerpo">${cuerpo}</div>`;
+  $('#avCerrar').onclick = () => d.close();
+  if (!pend) return;
+  $('#avOtro').onclick = () => { d.close(); abrir(null); };
+  const pagar = async () => {
+    if (demo) { pintarAviso(null, [pend], true); return; }
+    const msgEl = $('#avMsg'), clv = $('#avClave').value, b = $('#avPagar');
+    if (!clv) { msgEl.className = 'msg err'; msgEl.textContent = 'Escribe la contraseña.'; return; }
+    b.disabled = true;
+    const ok = await enviar({action: 'add', clave: clv, mes: pend, fecha: hoy(), importe: CUOTA, nota: '', dispositivo: miId}, msgEl);
+    if (ok) pintarAviso(null, [pend], true); else b.disabled = false;
+  };
+  $('#avPagar').onclick = pagar;
+  $('#avClave').onkeydown = e => { if (e.key === 'Enter') pagar(); };
+}
+
 function avisos() {
-  if (!pagos.length || $('#dlgAviso').open || $('#dlg').open || $('#dlgClave').open) return;
-  const clave = hoy().slice(0,7), msgs = [];
+  if (demo || !pagos.length || $('#dlgAviso').open || $('#dlg').open || $('#dlgClave').open) return;
+  const clave = hoy().slice(0,7);
   const pagado = pagos.filter(p => p.mes === clave).reduce((s,p) => s + p.importe, 0) >= CUOTA;
   // 1) Mes en curso sin pagar: se avisa en cada apertura (como mucho cada 30 min) hasta que se pague.
-  if (!pagado && Date.now() - ultimoPend > 30*60e3) msgs.push(['mal', 'El mes de ' + mesNombre(clave) + ' aún está pendiente de pago.']);
+  const pend = !pagado && Date.now() - ultimoPend > 30*60e3 ? clave : null;
   // 2) Pagos registrados desde otro dispositivo que este aún no ha visto (solo los del mes en curso).
   const nuevos = pagos.filter(p => p.por && p.por !== miId && !vistos.includes(p.id) && (p.mes === clave || (p.creado || '').slice(0,7) === clave))
     .sort((a,b) => a.mes.localeCompare(b.mes));
-  [...new Set(nuevos.map(p => p.mes))].forEach(m => msgs.push(['ok', 'El mes de ' + mesNombre(m) + ' ha sido pagado.']));
-  if (!msgs.length) return;
-  if (!pagado) ultimoPend = Date.now();
+  const meses = [...new Set(nuevos.map(p => p.mes))];
+  if (!pend && !meses.length) return;
+  if (pend) ultimoPend = Date.now();
   idsAviso = nuevos.map(p => p.id);
-  $('#avisoTexto').innerHTML = msgs.map(([t, x]) => `<div class="aviso ${t}">${x}</div>`).join('');
+  pintarAviso(pend, meses, false);
   $('#dlgAviso').showModal();
 }
-$('#btnAviso').onclick = () => $('#dlgAviso').close();
 $('#dlgAviso').addEventListener('close', () => marcarVistos(idsAviso));
 
 function estado(t, err) { const e = $('#estado'); e.textContent = t; e.className = err ? 'err' : ''; }
@@ -254,6 +314,7 @@ addEventListener('appinstalled', () => { $('#instalar').hidden = true; });
 if (!instalada && /iphone|ipad|ipod/i.test(navigator.userAgent)) $('#ayudaIos').hidden = false;
 
 render(); sincronizar(true);
+if (demo) { const c = hoy().slice(0,7); pintarAviso(demo === 'pagado' ? null : c, demo === 'pagado' ? [c] : [], false); $('#dlgAviso').showModal(); }
 setInterval(() => { if (!document.hidden && !$('#dlg').open && !$('#dlgClave').open) sincronizar(); }, 20000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) sincronizar(true); });
 </script>
