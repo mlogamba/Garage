@@ -1,6 +1,6 @@
 // Service worker: guarda la "carcasa" de la app para abrirla al instante y sin conexión.
 // Las llamadas a Apps Script (otro dominio) nunca se guardan: los datos vienen siempre del servidor.
-const CACHE = 'parking-v1';
+const CACHE = 'parking-v2';
 const ARCHIVOS = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
@@ -16,7 +16,7 @@ self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET' || u.origin !== location.origin) return;
   // Primero la red (para recibir actualizaciones); si falla, la copia guardada.
   e.respondWith(
-    fetch(e.request).then(r => {
+    fetch(e.request, {cache: 'no-cache'}).then(r => {
       const copia = r.clone();
       caches.open(CACHE).then(c => c.put(e.request, copia));
       return r;

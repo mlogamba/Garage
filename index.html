@@ -49,6 +49,8 @@ label{display:block;font-weight:500;font-size:14px;margin:12px 0 4px}
 input{width:100%;padding:10px;border:1px solid var(--borde);border-radius:8px;font:inherit}
 .acciones{display:flex;gap:8px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap}
 .msg{min-height:20px;margin-top:10px;font-size:14px;color:var(--suave)}.msg.err{color:var(--mal)}
+.aviso{padding:12px 14px;border-radius:8px;margin:10px 0;font-weight:600}
+.aviso.mal{background:#fde0dd;color:var(--mal)}.aviso.ok{background:#d8f1e3;color:var(--ok)}
 footer{text-align:center;margin-top:30px}footer button{background:none;border:0;color:var(--suave);text-decoration:underline;cursor:pointer;font:inherit;font-size:14px}
 </style>
 </head>
@@ -103,9 +105,15 @@ footer{text-align:center;margin-top:30px}footer button{background:none;border:0;
   </div>
 </form></dialog>
 
+<dialog id="dlgAviso">
+  <h3>Aviso</h3>
+  <div id="avisoTexto"></div>
+  <div class="acciones"><button class="p" id="btnAviso">Entendido</button></div>
+</dialog>
+
 <script>
 // 1) Pega aquí la URL de tu aplicación web de Apps Script (termina en /exec)
-const API_URL = 'https://script.google.com/macros/s/AKfycby6g08vMLgpVNIfQB5gcNEdsGT9BXgfuyNEUiwiEmZgffpI_GsPLnFIfJ47epbh0yXTWg/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbx9arRw4RHtfTe-igPaIn9isV18JuSESaDfceBne66WlYw_AzdVtJD9zIHeyEjL__-Qeg/exec';
 const CUOTA = 100;
 const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 const $ = s => document.querySelector(s);
@@ -117,6 +125,40 @@ const esc = s => s.replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','
 
 let pagos = [], editando = null, confirmando = false;
 try { pagos = JSON.parse(localStorage.getItem('pagos') || '[]'); } catch (e) {}
+
+// Identificador anónimo de este dispositivo (desde una página web no se puede conocer la IP).
+// Si el navegador no permite guardarlo, se usa uno temporal y los avisos se repiten en cada apertura.
+let miId;
+try {
+  miId = localStorage.getItem('dispositivo');
+  if (!miId) { miId = Math.random().toString(36).slice(2, 10) + Date.now().toString(36); localStorage.setItem('dispositivo', miId); }
+} catch (e) { miId = 'tmp' + Math.random().toString(36).slice(2, 10); }
+let vistos = [], idsAviso = [], ultimoPend = 0;
+try { vistos = JSON.parse(localStorage.getItem('vistos') || '[]'); } catch (e) {}
+function marcarVistos(ids) {
+  vistos = [...new Set([...vistos, ...ids])].slice(-200);
+  try { localStorage.setItem('vistos', JSON.stringify(vistos)); } catch (e) {}
+}
+const mesNombre = m => { const [a, b] = m.split('-'); return MESES[b-1] + (a !== hoy().slice(0,4) ? ' de ' + a : ''); };
+
+function avisos() {
+  if (!pagos.length || $('#dlgAviso').open || $('#dlg').open || $('#dlgClave').open) return;
+  const clave = hoy().slice(0,7), msgs = [];
+  const pagado = pagos.filter(p => p.mes === clave).reduce((s,p) => s + p.importe, 0) >= CUOTA;
+  // 1) Mes en curso sin pagar: se avisa en cada apertura (como mucho cada 30 min) hasta que se pague.
+  if (!pagado && Date.now() - ultimoPend > 30*60e3) msgs.push(['mal', 'El mes de ' + mesNombre(clave) + ' aún está pendiente de pago.']);
+  // 2) Pagos registrados desde otro dispositivo que este aún no ha visto (solo los del mes en curso).
+  const nuevos = pagos.filter(p => p.por && p.por !== miId && !vistos.includes(p.id) && (p.mes === clave || (p.creado || '').slice(0,7) === clave))
+    .sort((a,b) => a.mes.localeCompare(b.mes));
+  [...new Set(nuevos.map(p => p.mes))].forEach(m => msgs.push(['ok', 'El mes de ' + mesNombre(m) + ' ha sido pagado.']));
+  if (!msgs.length) return;
+  if (!pagado) ultimoPend = Date.now();
+  idsAviso = nuevos.map(p => p.id);
+  $('#avisoTexto').innerHTML = msgs.map(([t, x]) => `<div class="aviso ${t}">${x}</div>`).join('');
+  $('#dlgAviso').showModal();
+}
+$('#btnAviso').onclick = () => $('#dlgAviso').close();
+$('#dlgAviso').addEventListener('close', () => marcarVistos(idsAviso));
 
 function estado(t, err) { const e = $('#estado'); e.textContent = t; e.className = err ? 'err' : ''; }
 function guardarCopia() { try { localStorage.setItem('pagos', JSON.stringify(pagos)); } catch (e) {} }
@@ -144,7 +186,7 @@ function render() {
   $('#lista').innerHTML = html + '</div>';
 }
 
-async function sincronizar() {
+async function sincronizar(avisar) {
   if (API_URL.startsWith('PEGA')) { estado('Falta configurar la URL de Apps Script', true); return; }
   try {
     const r = await fetch(API_URL + '?t=' + Date.now());
@@ -153,6 +195,7 @@ async function sincronizar() {
     pagos = d.pagos; guardarCopia(); render();
     estado('Sincronizado a las ' + new Date().toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit'}));
   } catch (e) { estado('Sin conexión · se muestra la última copia', true); }
+  if (avisar) avisos();
 }
 
 async function enviar(cuerpo, msgEl) {
@@ -185,7 +228,7 @@ $('#btnCancelar').onclick = () => $('#dlg').close();
 $('#frm').onsubmit = async e => {
   e.preventDefault();
   const ok = await enviar({action: editando ? 'update' : 'add', id: editando, clave: $('#clave').value,
-    mes: $('#mes').value, fecha: $('#fecha').value, importe: parseFloat($('#importe').value), nota: $('#nota').value.trim()}, $('#msg'));
+    mes: $('#mes').value, fecha: $('#fecha').value, importe: parseFloat($('#importe').value), nota: $('#nota').value.trim(), dispositivo: miId}, $('#msg'));
   if (ok) $('#dlg').close();
 };
 $('#btnEliminar').onclick = async () => {
@@ -210,9 +253,9 @@ $('#btnInstalar').onclick = async () => { if (!invitacion) return; invitacion.pr
 addEventListener('appinstalled', () => { $('#instalar').hidden = true; });
 if (!instalada && /iphone|ipad|ipod/i.test(navigator.userAgent)) $('#ayudaIos').hidden = false;
 
-render(); sincronizar();
+render(); sincronizar(true);
 setInterval(() => { if (!document.hidden && !$('#dlg').open && !$('#dlgClave').open) sincronizar(); }, 20000);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) sincronizar(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) sincronizar(true); });
 </script>
 </body>
 </html>
